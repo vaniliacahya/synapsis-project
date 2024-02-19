@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/sirupsen/logrus"
+	"synapsis-project/database/databasesModel"
 	"synapsis-project/domain"
 	"synapsis-project/structures/request"
 )
@@ -82,7 +83,17 @@ func (h *Handler) AddCart() fiber.Handler {
 
 func (h *Handler) ListCart() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
-		result := h.useCase.ListCart(request.AddCartRequest{})
+		param := new(request.AddCartRequest)
+		if err := ctx.QueryParser(param); err != nil {
+			logrus.WithError(fmt.Errorf("parse param: %v", err)).Error()
+			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   fiber.StatusBadRequest,
+				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+				"data":   nil,
+			})
+		}
+
+		result := h.useCase.ListCart(request.AddCartRequest{IdCustomer: param.IdCustomer})
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to get cart : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
@@ -102,8 +113,18 @@ func (h *Handler) ListCart() fiber.Handler {
 
 func (h *Handler) DeleteCart() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
-		id := ctx.Params("id")
-		if id == "" {
+		body := new(request.DeleteCartRequest)
+		if err := ctx.BodyParser(body); err != nil {
+			logrus.WithError(fmt.Errorf("parse body: %v", err)).Error()
+			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   fiber.StatusBadRequest,
+				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+				"data":   nil,
+			})
+		}
+
+		body.Id = ctx.Params("id")
+		if body.Id == "" {
 			logrus.WithError(fmt.Errorf("id required")).Error()
 			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"code":   fiber.StatusBadRequest,
@@ -112,7 +133,7 @@ func (h *Handler) DeleteCart() fiber.Handler {
 			})
 		}
 
-		result := h.useCase.DeleteCart(request.DeleteCartRequest{Id: id})
+		result := h.useCase.DeleteCart(*body)
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to delete cart : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
@@ -125,6 +146,66 @@ func (h *Handler) DeleteCart() fiber.Handler {
 		return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
 			"code": fiber.StatusOK,
 			"msg":  "success delete cart",
+			"data": result.Response,
+		})
+	}
+}
+
+func (h *Handler) Order() fiber.Handler {
+	return func(ctx *fiber.Ctx) error {
+		body := new(request.OrderRequest)
+		if err := ctx.BodyParser(body); err != nil {
+			logrus.WithError(fmt.Errorf("parse body: %v", err)).Error()
+			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   fiber.StatusBadRequest,
+				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+				"data":   nil,
+			})
+		}
+
+		result := h.useCase.Order(*body)
+		if result.ErrorMsg != nil {
+			logrus.WithError(fmt.Errorf("failed to insert order : %v", result.ErrorMsg)).Error()
+			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
+				"code":   result.HttpErrorCode,
+				"reason": fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
+				"data":   nil,
+			})
+		}
+
+		return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
+			"code": fiber.StatusOK,
+			"msg":  "success insert order",
+			"data": result.Response,
+		})
+	}
+}
+
+func (h *Handler) Register() fiber.Handler {
+	return func(ctx *fiber.Ctx) error {
+		body := new(databasesModel.Customer)
+		if err := ctx.BodyParser(body); err != nil {
+			logrus.WithError(fmt.Errorf("parse body: %v", err)).Error()
+			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   fiber.StatusBadRequest,
+				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+				"data":   nil,
+			})
+		}
+
+		result := h.useCase.AddCustomer(*body)
+		if result.ErrorMsg != nil {
+			logrus.WithError(fmt.Errorf("failed to add customer : %v", result.ErrorMsg)).Error()
+			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
+				"code":   result.HttpErrorCode,
+				"reason": fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
+				"data":   nil,
+			})
+		}
+
+		return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
+			"code": fiber.StatusOK,
+			"msg":  "success add customer",
 			"data": result.Response,
 		})
 	}

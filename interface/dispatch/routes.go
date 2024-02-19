@@ -14,4 +14,11 @@ func Routes(app *fiber.App, handler domain.Handler) {
 	cart.Post("", handler.AddCart())
 	cart.Get("", handler.ListCart())
 	cart.Delete("/:id", handler.DeleteCart())
+
+	//checkout order
+	app.Post("/checkout", handler.Order())
+
+	//customer
+	app.Post("/register", handler.Register())
+	app.Post("/login", handler.Login())
 }

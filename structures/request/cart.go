@@ -7,7 +7,7 @@ type AddCart struct {
 
 type AddCartRequest struct {
 	AddCarts   []AddCart `json:"add_carts"`
-	IdCustomer string    `json:"id_customer"`
+	IdCustomer string    `json:"id_customer" query:"id_customer"`
 }
 
 type DeleteCartRequest struct {

@@ -1,7 +1,9 @@
 package data
 
 import (
+	"errors"
 	"fmt"
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 	"synapsis-project/config"
 	"synapsis-project/database/databasesModel"
@@ -36,13 +38,18 @@ func (d *Data) ListProduct(param request.ListProductRequest) (res []databasesMod
 	}
 
 	//select
-	if err = db.
+	err = db.
 		Limit(param.Limit).
 		Offset(param.Offset).
 		Order("name").
-		Find(&res).Error; err != nil {
-		err = fmt.Errorf("get list product: %v", err.Error())
-		return
+		Find(&res).Error
+
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			err = fmt.Errorf("get list product: %v", err.Error())
+			return
+		}
+		err = nil
 	}
 
 	return
@@ -71,11 +78,16 @@ func (d *Data) ListCart(param request.AddCartRequest) (result []databasesModel.C
 	count = data.Count
 
 	//select
-	if err = db.Select("c.*").Limit(int(count)).
+	err = db.Select("c.*").Limit(int(count)).
 		Order("c.created_at DESC").
-		Find(&result).Error; err != nil {
-		err = fmt.Errorf("get list cart: %v", err.Error())
-		return
+		Find(&result).Error
+
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			err = fmt.Errorf("get list cart: %v", err.Error())
+			return
+		}
+		err = nil
 	}
 
 	return
@@ -83,25 +95,26 @@ func (d *Data) ListCart(param request.AddCartRequest) (result []databasesModel.C
 
 func (d *Data) UpsertCart(requestInsert []databasesModel.Cart, requestUpdate []databasesModel.Cart) (err error) {
 
-	//bulk insert cart
-	if len(requestInsert) > 0 {
-		if err = d.dbMysql.Create(&requestInsert).Error; err != nil {
-			err = fmt.Errorf("add cart: %v", err.Error())
-			return
-		}
-	}
-
-	//update cart
-	if len(requestUpdate) > 0 {
-		for _, cart := range requestUpdate {
-			if err = d.dbMysql.Table(fmt.Sprintf("%s c", config.TableCart)).Where("c.id = ?", cart.Id).Updates(&cart).Error; err != nil {
-				err = fmt.Errorf("update cart: %v", err.Error())
-				return
+	return d.dbMysql.Transaction(func(tx *gorm.DB) error {
+		//bulk insert cart
+		if len(requestInsert) > 0 {
+			if err = d.dbMysql.Create(&requestInsert).Error; err != nil {
+				err = fmt.Errorf("add cart: %v", err.Error())
+				return err
 			}
 		}
-	}
 
-	return
+		//update cart
+		if len(requestUpdate) > 0 {
+			for _, cart := range requestUpdate {
+				if err = d.dbMysql.Table(fmt.Sprintf("%s c", config.TableCart)).Where("c.id = ?", cart.Id).Updates(&cart).Error; err != nil {
+					err = fmt.Errorf("update cart: %v", err.Error())
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func (d *Data) DeleteCart(deleteRequest request.DeleteCartRequest) (err error) {
@@ -112,4 +125,43 @@ func (d *Data) DeleteCart(deleteRequest request.DeleteCartRequest) (err error) {
 	}
 
 	return
+}
+
+func (d *Data) InsertOrder(body databasesModel.Order) (err error) {
+
+	return d.dbMysql.Transaction(func(tx *gorm.DB) error {
+
+		//insert order
+		if err = d.dbMysql.Create(&body).Error; err != nil {
+			err = fmt.Errorf("insert order: %v", err.Error())
+			return err
+		}
+
+		//delete all cart related idcustomer
+		if err = d.dbMysql.Where("id_customer = ?", body.IdCustomer).Delete(&databasesModel.Cart{}).Error; err != nil {
+			err = fmt.Errorf("delete all cart customer: %v", err.Error())
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (d *Data) AddCustomer(body databasesModel.Customer) (err error) {
+	//insert customer
+	err = d.dbMysql.Create(&body).Error
+
+	if err != nil {
+		var sqlErr *mysql.MySQLError
+		if errors.As(err, &sqlErr) {
+			if sqlErr.Number == 1062 {
+				err = fmt.Errorf("username is taken")
+				return
+			}
+		}
+		err = fmt.Errorf("insert customer: %v", err.Error())
+		return err
+	}
+
+	return nil
 }

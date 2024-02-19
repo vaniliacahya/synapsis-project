@@ -71,9 +71,16 @@ func main() {
 		}
 	}
 
+	customer := &databasesModel.Customer{
+		Id:        uuid.New().String(),
+		Name:      "Vanilia",
+		CreatedAt: &now,
+		UpdatedAt: &now,
+	}
+
 	//customer := &databasesModel.Customer{
 	//	Id:        uuid.New().String(),
-	//	Name:      "Vanilia",
+	//	Name:      "Cahya",
 	//	CreatedAt: &now,
 	//	UpdatedAt: &now,
 	//}
@@ -89,9 +96,9 @@ func main() {
 	}
 
 	//insert customer
-	//if err := dbMysql.Create(&customer).Error; err != nil {
-	//	fmt.Println("error insert customer")
-	//}
+	if err := dbMysql.Create(&customer).Error; err != nil {
+		fmt.Println("error insert customer")
+	}
 
 	fmt.Println("success seeding data")
 }

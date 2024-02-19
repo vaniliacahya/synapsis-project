@@ -1,11 +1,14 @@
 package usecase
 
 import (
-	"errors"
 	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
+	"github.com/joho/godotenv"
+	"golang.org/x/crypto/bcrypt"
+	"math/rand"
+	"os"
+	"regexp"
 	"synapsis-project/database/databasesModel"
 	"synapsis-project/domain"
 	"synapsis-project/structures/request"
@@ -121,7 +124,7 @@ func (u *UseCase) AddCart(body request.AddCartRequest) (result response.LogicRet
 
 	//get cart based on Idcustomer
 	dataCart, count, _, err := u.data.ListCart(body)
-	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
+	if err != nil {
 		result.ErrorMsg = err
 		result.HttpErrorCode = fiber.StatusInternalServerError
 		return
@@ -182,6 +185,12 @@ func (u *UseCase) AddCart(body request.AddCartRequest) (result response.LogicRet
 }
 
 func (u *UseCase) ListCart(param request.AddCartRequest) (result response.LogicReturn[response.ListCart]) {
+	//validate body
+	if param.IdCustomer == "" {
+		result.ErrorMsg = fmt.Errorf("id_customer required")
+		result.HttpErrorCode = fiber.StatusBadRequest
+		return
+	}
 
 	dataProduct, count, total, err := u.data.ListCart(param)
 	if err != nil {
@@ -205,6 +214,12 @@ func (u *UseCase) ListCart(param request.AddCartRequest) (result response.LogicR
 }
 
 func (u *UseCase) DeleteCart(param request.DeleteCartRequest) (result response.LogicReturn[response.ListCart]) {
+	//validate body
+	if param.IdCustomer == "" || param.Id == "" {
+		result.ErrorMsg = fmt.Errorf("id and id_customer required")
+		result.HttpErrorCode = fiber.StatusBadRequest
+		return
+	}
 
 	err := u.data.DeleteCart(param)
 	if err != nil {
@@ -232,4 +247,169 @@ func (u *UseCase) DeleteCart(param request.DeleteCartRequest) (result response.L
 	}
 
 	return
+}
+
+func (u *UseCase) Order(param request.OrderRequest) (result response.LogicReturn[response.SummaryOrder]) {
+
+	//validate body
+	if param.IdCustomer == "" {
+		result.ErrorMsg = fmt.Errorf("id_customer required")
+		result.HttpErrorCode = fiber.StatusBadRequest
+		return
+	}
+
+	cartData := u.ListCart(request.AddCartRequest{IdCustomer: param.IdCustomer})
+	if cartData.ErrorMsg != nil {
+		result.ErrorMsg = cartData.ErrorMsg
+		result.HttpErrorCode = cartData.HttpErrorCode
+		return
+	}
+
+	if cartData.Response.Count == 0 {
+		result.ErrorMsg = fmt.Errorf("no cart found")
+		result.HttpErrorCode = fiber.StatusBadRequest
+		return
+	}
+
+	now := time.Now()
+	expiredAt := now.Add(time.Hour * 24)
+	adminFee := generateAdminFee()
+	total := cartData.Response.Total + adminFee
+
+	orderData := databasesModel.Order{
+		Id:         uuid.New().String(),
+		IdOrder:    generateIdOrder(),
+		IdCustomer: param.IdCustomer,
+		Subtotal:   cartData.Response.Total,
+		AdminFee:   adminFee,
+		Total:      total,
+		ExpiredAt:  &expiredAt,
+		CreatedAt:  &now,
+		UpdatedAt:  &now,
+	}
+
+	err := u.data.InsertOrder(orderData)
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
+	dateExpired := expiredAt.Format("02 January 2006 at 15:04")
+
+	result.Response = response.SummaryOrder{
+		Order: orderData,
+		Description: fmt.Sprintf("Your invoice %s has been successfully processed and now awaiting for payment. ", orderData.IdOrder) +
+			fmt.Sprintf("Please make the payment of IDR %0.0f to the following bank account before %s to ensure your order is secured.", orderData.Total, dateExpired),
+	}
+
+	return
+}
+
+func (u *UseCase) AddCustomer(body databasesModel.Customer) (result response.LogicReturn[databasesModel.Customer]) {
+
+	//validate request
+	{
+		if body.Name == "" {
+			result.ErrorMsg = fmt.Errorf("name required")
+			result.HttpErrorCode = fiber.StatusBadRequest
+			return
+		}
+
+		if body.Username == "" {
+			result.ErrorMsg = fmt.Errorf("username required")
+			result.HttpErrorCode = fiber.StatusBadRequest
+			return
+		}
+
+		if body.Password == "" {
+			result.ErrorMsg = fmt.Errorf("password required")
+			result.HttpErrorCode = fiber.StatusBadRequest
+			return
+		}
+
+		validatePass := validatePassword(body.Password)
+		if validatePass != nil {
+			result.ErrorMsg = fmt.Errorf("invalid password format : %v", validatePass.Error())
+			result.HttpErrorCode = fiber.StatusBadRequest
+			return
+		}
+	}
+
+	hash, err := encryptPass(body.Password)
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
+	now := time.Now()
+	body.Id = uuid.New().String()
+	body.CreatedAt = &now
+	body.UpdatedAt = &now
+	body.Password = hash
+
+	err = u.data.AddCustomer(body)
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
+	result.Response = body
+
+	return
+}
+
+func generateIdOrder() string {
+	now := time.Now()
+	rand.Seed(now.UnixNano())
+	randInt := rand.Intn(100)
+	dateId := now.Format("02012006")
+
+	return fmt.Sprintf("#order%s%d", dateId, randInt)
+}
+
+func generateAdminFee() float64 {
+	rand.Seed(time.Now().UnixNano())
+	adminFee := rand.Intn(999-100) + 100
+	return float64(adminFee)
+}
+
+func validatePassword(pass string) (err error) {
+	if len(pass) < 8 {
+		return fmt.Errorf("password should at least 8 character")
+	}
+
+	//password must contain uppercase
+	uppercaseRegex := regexp.MustCompile("[A-Z]")
+	if !uppercaseRegex.MatchString(pass) {
+		return fmt.Errorf("password should contain uppercase")
+	}
+
+	//password must contain digit
+	digitRegex := regexp.MustCompile("\\d")
+	if !digitRegex.MatchString(pass) {
+		return fmt.Errorf("password should contain digit")
+	}
+
+	return
+}
+
+func encryptPass(pass string) (hash string, err error) {
+	godotenv.Load()
+	var (
+		passKey  = pass + os.Getenv("PASS_KEY")
+		passByte = []byte(passKey)
+		cost     = bcrypt.DefaultCost
+	)
+
+	hashByte, err := bcrypt.GenerateFromPassword(passByte, cost)
+	if err != nil {
+		return "", err
+	}
+
+	hash = string(hashByte)
+	return
+
 }

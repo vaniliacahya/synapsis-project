@@ -59,5 +59,6 @@ func MigrateUp(db *gorm.DB) (err error) {
 		&databasesModel.ProductCategory{},
 		&databasesModel.Product{},
 		&databasesModel.Customer{},
-		&databasesModel.Cart{})
+		&databasesModel.Cart{},
+		&databasesModel.Order{})
 }
