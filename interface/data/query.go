@@ -37,6 +37,10 @@ func (d *Data) ListProduct(param request.ListProductRequest) (res []databasesMod
 		return
 	}
 
+	if param.Limit == 0 {
+		param.Limit = int(count)
+	}
+
 	//select
 	err = db.
 		Limit(param.Limit).
@@ -93,33 +97,33 @@ func (d *Data) ListCart(param request.AddCartRequest) (result []databasesModel.C
 	return
 }
 
-func (d *Data) UpsertCart(requestInsert []databasesModel.Cart, requestUpdate []databasesModel.Cart) (err error) {
+func (d *Data) AddCart(requestInsert databasesModel.Cart) (err error) {
 
-	return d.dbMysql.Transaction(func(tx *gorm.DB) error {
-		//bulk insert cart
-		if len(requestInsert) > 0 {
-			if err = d.dbMysql.Create(&requestInsert).Error; err != nil {
-				err = fmt.Errorf("add cart: %v", err.Error())
-				return err
-			}
-		}
+	if err = d.dbMysql.Create(&requestInsert).Error; err != nil {
+		err = fmt.Errorf("add cart: %v", err.Error())
+		return err
+	}
 
-		//update cart
-		if len(requestUpdate) > 0 {
-			for _, cart := range requestUpdate {
-				if err = d.dbMysql.Table(fmt.Sprintf("%s c", config.TableCart)).Where("c.id = ?", cart.Id).Updates(&cart).Error; err != nil {
-					err = fmt.Errorf("update cart: %v", err.Error())
-					return err
-				}
-			}
-		}
-		return nil
-	})
+	return
+}
+
+func (d *Data) UpdateCart(cart databasesModel.Cart) (err error) {
+
+	if err = d.dbMysql.
+		Table(fmt.Sprintf("%s c", config.TableCart)).
+		Where("c.id = ?", cart.Id).
+		Updates(&cart).Error; err != nil {
+		err = fmt.Errorf("update cart: %v", err.Error())
+		return err
+	}
+
+	return
 }
 
 func (d *Data) DeleteCart(deleteRequest request.DeleteCartRequest) (err error) {
 
-	if err = d.dbMysql.Where("id = ?", deleteRequest.Id).Delete(&databasesModel.Cart{}).Error; err != nil {
+	if err = d.dbMysql.Where("id = ?", deleteRequest.Id).
+		Delete(&databasesModel.Cart{}).Error; err != nil {
 		err = fmt.Errorf("delete cart: %v", err.Error())
 		return
 	}
@@ -164,4 +168,16 @@ func (d *Data) AddCustomer(body databasesModel.Customer) (err error) {
 	}
 
 	return nil
+}
+
+func (d *Data) GetCustomer(body databasesModel.Customer) (res databasesModel.Customer, err error) {
+
+	if err = d.dbMysql.Table(config.TableCustomer).
+		Where("username = ?", body.Username).
+		First(&res).Error; err != nil {
+		err = fmt.Errorf("get customer : %v", err.Error())
+		return
+	}
+
+	return
 }

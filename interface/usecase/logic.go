@@ -1,7 +1,11 @@
 package usecase
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -11,6 +15,7 @@ import (
 	"regexp"
 	"synapsis-project/database/databasesModel"
 	"synapsis-project/domain"
+	"synapsis-project/helper"
 	"synapsis-project/structures/request"
 	"synapsis-project/structures/response"
 	"time"
@@ -18,18 +23,17 @@ import (
 
 type UseCase struct {
 	data domain.Data
+	red  *redis.Client
 }
 
-func New(d domain.Data) *UseCase {
+func New(d domain.Data, r *redis.Client) *UseCase {
 	return &UseCase{
 		data: d,
+		red:  r,
 	}
 }
 
 func (u *UseCase) ListProduct(param request.ListProductRequest) (result response.LogicReturn[response.ListProduct]) {
-	if param.Limit == 0 {
-		param.Limit = 10 //default
-	}
 
 	dataProduct, count, err := u.data.ListProduct(param)
 	if err != nil {
@@ -54,12 +58,9 @@ func (u *UseCase) ListProduct(param request.ListProductRequest) (result response
 func (u *UseCase) AddCart(body request.AddCartRequest) (result response.LogicReturn[response.ListCart]) {
 
 	now := time.Now()
-	idProduct := []string{}
-	newInsertCart := []databasesModel.Cart{}
-	newUpdateCart := []databasesModel.Cart{}
-	cartMap := make(map[string]databasesModel.Cart)
-	productMap := make(map[string]databasesModel.Product)
-	cartExistMap := make(map[string]databasesModel.Cart)
+	upsertCart := databasesModel.Cart{}
+	addCart := body.AddCarts
+	var countDataCheck int64
 
 	//validate body
 	{
@@ -69,57 +70,31 @@ func (u *UseCase) AddCart(body request.AddCartRequest) (result response.LogicRet
 			return
 		}
 
-		if len(body.AddCarts) <= 0 {
-			result.ErrorMsg = fmt.Errorf("add_carts required")
+		if addCart.IdProduct == "" {
+			result.ErrorMsg = fmt.Errorf("id_product required")
 			result.HttpErrorCode = fiber.StatusBadRequest
 			return
 		}
 
-		for _, req := range body.AddCarts {
-			if req.IdProduct == "" {
-				result.ErrorMsg = fmt.Errorf("id_product required")
-				result.HttpErrorCode = fiber.StatusBadRequest
-				return
-			}
-
-			if req.Qty <= 0 {
-				result.ErrorMsg = fmt.Errorf("qty required")
-				result.HttpErrorCode = fiber.StatusBadRequest
-				return
-			}
-
-			//needed for save idproduct used
-			idProduct = append(idProduct, req.IdProduct)
-
-			// mapping cart
-			cartMap[req.IdProduct] = databasesModel.Cart{
-				Id:         uuid.New().String(),
-				IdCustomer: body.IdCustomer,
-				IdProduct:  req.IdProduct,
-				CreatedAt:  &now,
-				UpdatedAt:  &now,
-				Qty:        req.Qty,
-			}
+		if addCart.Qty <= 0 {
+			result.ErrorMsg = fmt.Errorf("qty required")
+			result.HttpErrorCode = fiber.StatusBadRequest
+			return
 		}
 	}
 
 	//get price every product mentioned
-	dataProduct, count, err := u.data.ListProduct(request.ListProductRequest{IdProduct: idProduct, Limit: len(idProduct)})
+	dataProduct, count, err := u.data.ListProduct(request.ListProductRequest{IdProduct: []string{addCart.IdProduct}, Limit: 1})
 	if err != nil {
 		result.ErrorMsg = err
 		result.HttpErrorCode = fiber.StatusInternalServerError
 		return
 	}
 
-	if count != int64(len(body.AddCarts)) {
+	if count != 1 {
 		result.ErrorMsg = fmt.Errorf("product not found")
 		result.HttpErrorCode = fiber.StatusBadRequest
 		return
-	}
-
-	// mapping data product
-	for _, p := range dataProduct {
-		productMap[p.Id] = p
 	}
 
 	//get cart based on Idcustomer
@@ -131,40 +106,51 @@ func (u *UseCase) AddCart(body request.AddCartRequest) (result response.LogicRet
 	}
 
 	if count > 0 {
-		//mapping existing cart
-		for _, cart := range dataCart {
-			cartExistMap[cart.IdProduct] = cart
+		// check if same product exist
+		for _, currentCart := range dataCart {
+			if currentCart.IdProduct == addCart.IdProduct {
+				upsertCart = databasesModel.Cart{
+					Id:           currentCart.Id,
+					IdCustomer:   currentCart.IdCustomer,
+					IdProduct:    currentCart.IdProduct,
+					CreatedAt:    currentCart.CreatedAt,
+					UpdatedAt:    &now,
+					Qty:          addCart.Qty,
+					PriceProduct: dataProduct[0].Price,
+					TotalPrice:   dataProduct[0].Price * addCart.Qty,
+				}
+
+				//product exist in cart, then update cart
+				err = u.data.UpdateCart(upsertCart)
+				if err != nil {
+					result.ErrorMsg = err
+					result.HttpErrorCode = fiber.StatusInternalServerError
+					return
+				}
+
+				break
+			}
+			countDataCheck++
 		}
 	}
 
-	// check if same product exist
-	for key, cart := range cartMap {
-		//if same product exist, then update qty and price
-		if _, ok := cartExistMap[key]; ok {
-			newUpdateCart = append(newUpdateCart, databasesModel.Cart{
-				Id:           cartExistMap[key].Id,
-				IdCustomer:   cartExistMap[key].IdCustomer,
-				IdProduct:    cartExistMap[key].IdProduct,
-				CreatedAt:    cartExistMap[key].CreatedAt,
-				UpdatedAt:    &now,
-				Qty:          cartMap[key].Qty,
-				PriceProduct: productMap[key].Price,
-				TotalPrice:   productMap[key].Price * cartMap[key].Qty,
-			})
-		} else {
-			//if product doesn't exist, then update price
-			cart.PriceProduct = productMap[key].Price
-			cart.TotalPrice = productMap[key].Price * cartMap[key].Qty
-			newInsertCart = append(newInsertCart, cart)
+	if count <= 0 || countDataCheck == count {
+		//product not exist in cart, then insert
+		upsertCart = databasesModel.Cart{
+			Id:           uuid.New().String(),
+			IdCustomer:   body.IdCustomer,
+			IdProduct:    addCart.IdProduct,
+			Qty:          addCart.Qty,
+			PriceProduct: dataProduct[0].Price,
+			TotalPrice:   dataProduct[0].Price * addCart.Qty,
 		}
-	}
 
-	//upsert cart
-	err = u.data.UpsertCart(newInsertCart, newUpdateCart)
-	if err != nil {
-		result.ErrorMsg = err
-		result.HttpErrorCode = fiber.StatusInternalServerError
-		return
+		err = u.data.AddCart(upsertCart)
+		if err != nil {
+			result.ErrorMsg = err
+			result.HttpErrorCode = fiber.StatusInternalServerError
+			return
+		}
 	}
 
 	// get cart based on Idcustomer
@@ -181,6 +167,39 @@ func (u *UseCase) AddCart(body request.AddCartRequest) (result response.LogicRet
 		Total:    total,
 	}
 
+	REDISKEY := fmt.Sprintf("CART:%s", body.IdCustomer)
+
+	//check if data exist in redis
+	exist, err := u.red.Exists(context.Background(), REDISKEY).Result()
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
+	//if data found, then delete
+	if exist == 1 {
+		err = u.red.Del(context.Background(), REDISKEY).Err()
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
+	//insert to redis
+	dataMarshall, err := json.Marshal(result.Response)
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
+	err = u.red.Set(context.Background(), REDISKEY, dataMarshall, 0).Err()
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
 	return
 }
 
@@ -192,22 +211,59 @@ func (u *UseCase) ListCart(param request.AddCartRequest) (result response.LogicR
 		return
 	}
 
-	dataProduct, count, total, err := u.data.ListCart(param)
+	REDISKEY := fmt.Sprintf("CART:%s", param.IdCustomer)
+
+	//cek if data exist in redis
+	dataCartRedis, err := u.red.Get(context.Background(), REDISKEY).Result()
+	if err != nil {
+		if !errors.Is(err, redis.Nil) {
+			result.ErrorMsg = err
+			result.HttpErrorCode = fiber.StatusInternalServerError
+			return
+		}
+
+		// if redis.nil, then get data from db
+		dataCart, count, total, err := u.data.ListCart(param)
+		if err != nil {
+			result.ErrorMsg = err
+			result.HttpErrorCode = fiber.StatusInternalServerError
+			return
+		}
+
+		if count == 0 {
+			result.Response.Products = []databasesModel.Cart{}
+			return
+		}
+
+		result.Response = response.ListCart{
+			Count:    count,
+			Products: dataCart,
+			Total:    total,
+		}
+
+		//insert to redis
+		dataMarshall, err := json.Marshal(result.Response)
+		if err != nil {
+			result.ErrorMsg = err
+			result.HttpErrorCode = fiber.StatusInternalServerError
+			return
+		}
+
+		err = u.red.Set(context.Background(), REDISKEY, dataMarshall, 0).Err()
+		if err != nil {
+			result.ErrorMsg = err
+			result.HttpErrorCode = fiber.StatusInternalServerError
+			return
+		}
+
+		return
+	}
+
+	err = json.Unmarshal([]byte(dataCartRedis), &result.Response)
 	if err != nil {
 		result.ErrorMsg = err
 		result.HttpErrorCode = fiber.StatusInternalServerError
 		return
-	}
-
-	if count == 0 {
-		result.Response.Products = []databasesModel.Cart{}
-		return
-	}
-
-	result.Response = response.ListCart{
-		Count:    count,
-		Products: dataProduct,
-		Total:    total,
 	}
 
 	return
@@ -244,6 +300,31 @@ func (u *UseCase) DeleteCart(param request.DeleteCartRequest) (result response.L
 		Count:    count,
 		Products: dataProduct,
 		Total:    total,
+	}
+
+	REDISKEY := fmt.Sprintf("CART:%s", param.IdCustomer)
+
+	//delete redis key
+	err = u.red.Del(context.Background(), REDISKEY).Err()
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
+	//insert to redis
+	dataMarshall, err := json.Marshal(result.Response)
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
+	err = u.red.Set(context.Background(), REDISKEY, dataMarshall, 0).Err()
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
 	}
 
 	return
@@ -347,7 +428,7 @@ func (u *UseCase) AddCustomer(body databasesModel.Customer) (result response.Log
 	body.Id = uuid.New().String()
 	body.CreatedAt = &now
 	body.UpdatedAt = &now
-	body.Password = hash
+	body.Password = string(hash)
 
 	err = u.data.AddCustomer(body)
 	if err != nil {
@@ -357,6 +438,60 @@ func (u *UseCase) AddCustomer(body databasesModel.Customer) (result response.Log
 	}
 
 	result.Response = body
+
+	return
+}
+
+func (u *UseCase) Login(body databasesModel.Customer) (result response.LogicReturn[response.LoginResponse]) {
+
+	//validate request
+	{
+		if body.Username == "" {
+			result.ErrorMsg = fmt.Errorf("username required")
+			result.HttpErrorCode = fiber.StatusBadRequest
+			return
+		}
+
+		if body.Password == "" {
+			result.ErrorMsg = fmt.Errorf("password required")
+			result.HttpErrorCode = fiber.StatusBadRequest
+			return
+		}
+	}
+
+	dataCustomer, err := u.data.GetCustomer(body)
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
+	if dataCustomer.Id == "" {
+		result.ErrorMsg = fmt.Errorf("username not found")
+		result.HttpErrorCode = fiber.StatusNotFound
+		return
+	}
+
+	//compare pass
+	{
+		passKey := body.Password + os.Getenv("PASS_KEY")
+		err = bcrypt.CompareHashAndPassword([]byte(dataCustomer.Password), []byte(passKey))
+		if err != nil {
+			result.ErrorMsg = fmt.Errorf("invalid password")
+			result.HttpErrorCode = fiber.StatusBadRequest
+			return
+		}
+	}
+
+	//generate JWT
+	token, err := helper.GenerateJWT(dataCustomer.Id)
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
+	result.Response.Token = token
 
 	return
 }
@@ -396,7 +531,7 @@ func validatePassword(pass string) (err error) {
 	return
 }
 
-func encryptPass(pass string) (hash string, err error) {
+func encryptPass(pass string) (hash []byte, err error) {
 	godotenv.Load()
 	var (
 		passKey  = pass + os.Getenv("PASS_KEY")
@@ -404,12 +539,11 @@ func encryptPass(pass string) (hash string, err error) {
 		cost     = bcrypt.DefaultCost
 	)
 
-	hashByte, err := bcrypt.GenerateFromPassword(passByte, cost)
+	hash, err = bcrypt.GenerateFromPassword(passByte, cost)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	hash = string(hashByte)
 	return
 
 }

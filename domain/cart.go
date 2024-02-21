@@ -21,6 +21,7 @@ type CartUseCase interface {
 
 type CartData interface {
 	ListCart(param request.AddCartRequest) ([]databasesModel.Cart, int64, float64, error)
-	UpsertCart(requestInsert []databasesModel.Cart, requestUpdate []databasesModel.Cart) error
+	AddCart(requestInsert databasesModel.Cart) error
+	UpdateCart(requestInsert databasesModel.Cart) error
 	DeleteCart(param request.DeleteCartRequest) error
 }

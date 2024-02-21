@@ -6,6 +6,7 @@ import (
 )
 
 func Routes(app *fiber.App, handler domain.Handler) {
+
 	//product
 	app.Get("/products", handler.ListProduct())
 

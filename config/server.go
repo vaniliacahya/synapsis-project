@@ -12,5 +12,6 @@ func GetServer() *fiber.App {
 		JSONEncoder: sonic.Marshal,
 		JSONDecoder: sonic.Unmarshal,
 	})
+
 	return app
 }

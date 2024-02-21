@@ -25,6 +25,7 @@ func InitRegistry(app *fiber.App, dbMysql gorm.DB, redis *redis.Client) {
 	_interface.Init(_interface.InitData{
 		App:     app,
 		DbMysql: dbMysql,
+		Redis:   redis,
 	})
 
 	/**

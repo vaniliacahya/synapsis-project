@@ -6,6 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"synapsis-project/database/databasesModel"
 	"synapsis-project/domain"
+	"synapsis-project/helper"
 	"synapsis-project/structures/request"
 )
 
@@ -63,6 +64,18 @@ func (h *Handler) AddCart() fiber.Handler {
 			})
 		}
 
+		claims, err := helper.ExtractData(ctx)
+		if err != nil {
+			logrus.WithError(fmt.Errorf("extract token: %v", err)).Error()
+			return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"code":   fiber.StatusUnauthorized,
+				"reason": fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
+				"data":   nil,
+			})
+		}
+
+		body.IdCustomer = claims.IdCustomer
+
 		result := h.useCase.AddCart(*body)
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to add product to cart : %v", result.ErrorMsg)).Error()
@@ -83,17 +96,17 @@ func (h *Handler) AddCart() fiber.Handler {
 
 func (h *Handler) ListCart() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
-		param := new(request.AddCartRequest)
-		if err := ctx.QueryParser(param); err != nil {
-			logrus.WithError(fmt.Errorf("parse param: %v", err)).Error()
-			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"code":   fiber.StatusBadRequest,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+		claims, err := helper.ExtractData(ctx)
+		if err != nil {
+			logrus.WithError(fmt.Errorf("extract token: %v", err)).Error()
+			return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"code":   fiber.StatusUnauthorized,
+				"reason": fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
 				"data":   nil,
 			})
 		}
 
-		result := h.useCase.ListCart(request.AddCartRequest{IdCustomer: param.IdCustomer})
+		result := h.useCase.ListCart(request.AddCartRequest{IdCustomer: claims.IdCustomer})
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to get cart : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
@@ -113,18 +126,18 @@ func (h *Handler) ListCart() fiber.Handler {
 
 func (h *Handler) DeleteCart() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
-		body := new(request.DeleteCartRequest)
-		if err := ctx.BodyParser(body); err != nil {
-			logrus.WithError(fmt.Errorf("parse body: %v", err)).Error()
-			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"code":   fiber.StatusBadRequest,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+		claims, err := helper.ExtractData(ctx)
+		if err != nil {
+			logrus.WithError(fmt.Errorf("extract token: %v", err)).Error()
+			return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"code":   fiber.StatusUnauthorized,
+				"reason": fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
 				"data":   nil,
 			})
 		}
 
-		body.Id = ctx.Params("id")
-		if body.Id == "" {
+		id := ctx.Params("id")
+		if id == "" {
 			logrus.WithError(fmt.Errorf("id required")).Error()
 			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"code":   fiber.StatusBadRequest,
@@ -133,7 +146,11 @@ func (h *Handler) DeleteCart() fiber.Handler {
 			})
 		}
 
-		result := h.useCase.DeleteCart(*body)
+		result := h.useCase.DeleteCart(request.DeleteCartRequest{
+			Id:         id,
+			IdCustomer: claims.IdCustomer,
+		})
+
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to delete cart : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
@@ -153,17 +170,19 @@ func (h *Handler) DeleteCart() fiber.Handler {
 
 func (h *Handler) Order() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
-		body := new(request.OrderRequest)
-		if err := ctx.BodyParser(body); err != nil {
-			logrus.WithError(fmt.Errorf("parse body: %v", err)).Error()
-			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"code":   fiber.StatusBadRequest,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+		claims, err := helper.ExtractData(ctx)
+		if err != nil {
+			logrus.WithError(fmt.Errorf("extract token: %v", err)).Error()
+			return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"code":   fiber.StatusUnauthorized,
+				"reason": fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
 				"data":   nil,
 			})
 		}
 
-		result := h.useCase.Order(*body)
+		result := h.useCase.Order(request.OrderRequest{
+			IdCustomer: claims.IdCustomer,
+		})
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to insert order : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
@@ -206,6 +225,36 @@ func (h *Handler) Register() fiber.Handler {
 		return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
 			"code": fiber.StatusOK,
 			"msg":  "success add customer",
+			"data": result.Response,
+		})
+	}
+}
+
+func (h *Handler) Login() fiber.Handler {
+	return func(ctx *fiber.Ctx) error {
+		body := new(databasesModel.Customer)
+		if err := ctx.BodyParser(body); err != nil {
+			logrus.WithError(fmt.Errorf("parse body: %v", err)).Error()
+			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code":   fiber.StatusBadRequest,
+				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+				"data":   nil,
+			})
+		}
+
+		result := h.useCase.Login(*body)
+		if result.ErrorMsg != nil {
+			logrus.WithError(fmt.Errorf("failed to login : %v", result.ErrorMsg)).Error()
+			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
+				"code":   result.HttpErrorCode,
+				"reason": fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
+				"data":   nil,
+			})
+		}
+
+		return ctx.Status(fiber.StatusOK).JSON(fiber.Map{
+			"code": fiber.StatusOK,
+			"msg":  "success login",
 			"data": result.Response,
 		})
 	}
