@@ -80,6 +80,6 @@ Vanilia Cahya Nugroho
        
  <p align="right">(<a href="#top">back to top</a>)</p>
 <h3>
-<p align="center">:copyright: 2022 </p>
+<p align="center">:copyright: 2024 </p>
 </h3>
 <!-- end -->
