@@ -28,9 +28,9 @@ func (h *Handler) ListProduct() fiber.Handler {
 		if err := ctx.QueryParser(param); err != nil {
 			logrus.WithError(fmt.Errorf("parse param: %v", err)).Error()
 			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"code":   fiber.StatusBadRequest,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
-				"data":   nil,
+				"code": fiber.StatusBadRequest,
+				"msg":  fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+				"data": nil,
 			})
 		}
 
@@ -38,9 +38,9 @@ func (h *Handler) ListProduct() fiber.Handler {
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to get list product : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
-				"code":   result.HttpErrorCode,
-				"reason": fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
-				"data":   nil,
+				"code": result.HttpErrorCode,
+				"msg":  fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
+				"data": nil,
 			})
 		}
 
@@ -58,9 +58,9 @@ func (h *Handler) AddCart() fiber.Handler {
 		if err := ctx.BodyParser(body); err != nil {
 			logrus.WithError(fmt.Errorf("parse body: %v", err)).Error()
 			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"code":   fiber.StatusBadRequest,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
-				"data":   nil,
+				"code": fiber.StatusBadRequest,
+				"msg":  fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+				"data": nil,
 			})
 		}
 
@@ -68,9 +68,9 @@ func (h *Handler) AddCart() fiber.Handler {
 		if err != nil {
 			logrus.WithError(fmt.Errorf("extract token: %v", err)).Error()
 			return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"code":   fiber.StatusUnauthorized,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
-				"data":   nil,
+				"code": fiber.StatusUnauthorized,
+				"msg":  fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
+				"data": nil,
 			})
 		}
 
@@ -80,9 +80,9 @@ func (h *Handler) AddCart() fiber.Handler {
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to add product to cart : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
-				"code":   result.HttpErrorCode,
-				"reason": fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
-				"data":   nil,
+				"code": result.HttpErrorCode,
+				"msg":  fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
+				"data": nil,
 			})
 		}
 
@@ -100,9 +100,9 @@ func (h *Handler) ListCart() fiber.Handler {
 		if err != nil {
 			logrus.WithError(fmt.Errorf("extract token: %v", err)).Error()
 			return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"code":   fiber.StatusUnauthorized,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
-				"data":   nil,
+				"code": fiber.StatusUnauthorized,
+				"msg":  fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
+				"data": nil,
 			})
 		}
 
@@ -110,9 +110,9 @@ func (h *Handler) ListCart() fiber.Handler {
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to get cart : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
-				"code":   result.HttpErrorCode,
-				"reason": fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
-				"data":   nil,
+				"code": result.HttpErrorCode,
+				"msg":  fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
+				"data": nil,
 			})
 		}
 
@@ -130,9 +130,9 @@ func (h *Handler) DeleteCart() fiber.Handler {
 		if err != nil {
 			logrus.WithError(fmt.Errorf("extract token: %v", err)).Error()
 			return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"code":   fiber.StatusUnauthorized,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
-				"data":   nil,
+				"code": fiber.StatusUnauthorized,
+				"msg":  fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
+				"data": nil,
 			})
 		}
 
@@ -140,9 +140,9 @@ func (h *Handler) DeleteCart() fiber.Handler {
 		if id == "" {
 			logrus.WithError(fmt.Errorf("id required")).Error()
 			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"code":   fiber.StatusBadRequest,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, "id required"),
-				"data":   nil,
+				"code": fiber.StatusBadRequest,
+				"msg":  fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, "id required"),
+				"data": nil,
 			})
 		}
 
@@ -154,9 +154,9 @@ func (h *Handler) DeleteCart() fiber.Handler {
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to delete cart : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
-				"code":   result.HttpErrorCode,
-				"reason": fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
-				"data":   nil,
+				"code": result.HttpErrorCode,
+				"msg":  fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
+				"data": nil,
 			})
 		}
 
@@ -174,9 +174,9 @@ func (h *Handler) Order() fiber.Handler {
 		if err != nil {
 			logrus.WithError(fmt.Errorf("extract token: %v", err)).Error()
 			return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"code":   fiber.StatusUnauthorized,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
-				"data":   nil,
+				"code": fiber.StatusUnauthorized,
+				"msg":  fmt.Sprintf("[%d] %s", fiber.StatusUnauthorized, err.Error()),
+				"data": nil,
 			})
 		}
 
@@ -186,9 +186,9 @@ func (h *Handler) Order() fiber.Handler {
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to insert order : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
-				"code":   result.HttpErrorCode,
-				"reason": fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
-				"data":   nil,
+				"code": result.HttpErrorCode,
+				"msg":  fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
+				"data": nil,
 			})
 		}
 
@@ -206,9 +206,9 @@ func (h *Handler) Register() fiber.Handler {
 		if err := ctx.BodyParser(body); err != nil {
 			logrus.WithError(fmt.Errorf("parse body: %v", err)).Error()
 			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"code":   fiber.StatusBadRequest,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
-				"data":   nil,
+				"code": fiber.StatusBadRequest,
+				"msg":  fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+				"data": nil,
 			})
 		}
 
@@ -216,9 +216,9 @@ func (h *Handler) Register() fiber.Handler {
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to add customer : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
-				"code":   result.HttpErrorCode,
-				"reason": fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
-				"data":   nil,
+				"code": result.HttpErrorCode,
+				"msg":  fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
+				"data": nil,
 			})
 		}
 
@@ -236,9 +236,9 @@ func (h *Handler) Login() fiber.Handler {
 		if err := ctx.BodyParser(body); err != nil {
 			logrus.WithError(fmt.Errorf("parse body: %v", err)).Error()
 			return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"code":   fiber.StatusBadRequest,
-				"reason": fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
-				"data":   nil,
+				"code": fiber.StatusBadRequest,
+				"msg":  fmt.Sprintf("[%d] %s", fiber.StatusBadRequest, err.Error()),
+				"data": nil,
 			})
 		}
 
@@ -246,9 +246,9 @@ func (h *Handler) Login() fiber.Handler {
 		if result.ErrorMsg != nil {
 			logrus.WithError(fmt.Errorf("failed to login : %v", result.ErrorMsg)).Error()
 			return ctx.Status(result.HttpErrorCode).JSON(fiber.Map{
-				"code":   result.HttpErrorCode,
-				"reason": fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
-				"data":   nil,
+				"code": result.HttpErrorCode,
+				"msg":  fmt.Sprintf("[%d] %s", result.HttpErrorCode, result.ErrorMsg),
+				"data": nil,
 			})
 		}
 

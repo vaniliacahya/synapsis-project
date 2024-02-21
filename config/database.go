@@ -36,7 +36,7 @@ func initDbMysqlConfig() *DBConfig {
 	var configuration DBConfig
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("Cannot read configuration, using system envxxx")
+		log.Printf("Cannot read configuration, using system envxxx : %v", err.Error())
 	}
 
 	configuration.Database = os.Getenv("MYSQL_DB_DB")
