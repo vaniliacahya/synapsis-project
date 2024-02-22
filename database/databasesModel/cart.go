@@ -14,4 +14,5 @@ type Cart struct {
 	Qty          float64    `json:"qty"`
 	PriceProduct float64    `json:"price"`
 	TotalPrice   float64    `json:"total_price"`
+	IdOrder      string     `json:"id_order"`
 }

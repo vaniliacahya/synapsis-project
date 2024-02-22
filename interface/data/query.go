@@ -66,10 +66,11 @@ func (d *Data) ListCart(param request.AddCartRequest) (result []databasesModel.C
 	}
 	data := customStruct{}
 
-	db := d.dbMysql.Table(fmt.Sprintf("%s c", config.TableCart))
+	db := d.dbMysql.
+		Table(fmt.Sprintf("%s c", config.TableCart)).Where("c.id_order = ?", "")
 
 	if param.IdCustomer != "" {
-		db.Where("c.id_customer", param.IdCustomer)
+		db.Where("c.id_customer = ?", param.IdCustomer)
 	}
 
 	//count
@@ -112,6 +113,7 @@ func (d *Data) UpdateCart(cart databasesModel.Cart) (err error) {
 	if err = d.dbMysql.
 		Table(fmt.Sprintf("%s c", config.TableCart)).
 		Where("c.id = ?", cart.Id).
+		Where("c.id_order = ?", "").
 		Updates(&cart).Error; err != nil {
 		err = fmt.Errorf("update cart: %v", err.Error())
 		return err
@@ -122,7 +124,9 @@ func (d *Data) UpdateCart(cart databasesModel.Cart) (err error) {
 
 func (d *Data) DeleteCart(deleteRequest request.DeleteCartRequest) (err error) {
 
-	if err = d.dbMysql.Where("id = ?", deleteRequest.Id).
+	if err = d.dbMysql.
+		Where("id = ?", deleteRequest.Id).
+		Where("id_order = ?", "").
 		Delete(&databasesModel.Cart{}).Error; err != nil {
 		err = fmt.Errorf("delete cart: %v", err.Error())
 		return
@@ -141,9 +145,12 @@ func (d *Data) InsertOrder(body databasesModel.Order) (err error) {
 			return err
 		}
 
-		//delete all cart related idcustomer
-		if err = d.dbMysql.Where("id_customer = ?", body.IdCustomer).Delete(&databasesModel.Cart{}).Error; err != nil {
-			err = fmt.Errorf("delete all cart customer: %v", err.Error())
+		//update all cart related idcustomer
+		if err = d.dbMysql.Table(config.TableCart).
+			Where("id_customer = ?", body.IdCustomer).
+			Where("id_order = ?", "").
+			Update("id_order", body.Id).Error; err != nil {
+			err = fmt.Errorf("update all cart customer: %v", err.Error())
 			return err
 		}
 

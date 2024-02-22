@@ -376,12 +376,23 @@ func (u *UseCase) Order(param request.OrderRequest) (result response.LogicReturn
 		return
 	}
 
+	REDISKEY := fmt.Sprintf("CART:%s", param.IdCustomer)
+
+	//delete redis key
+	err = u.red.Del(context.Background(), REDISKEY).Err()
+	if err != nil {
+		result.ErrorMsg = err
+		result.HttpErrorCode = fiber.StatusInternalServerError
+		return
+	}
+
 	dateExpired := expiredAt.Format("02 January 2006 at 15:04")
 
 	result.Response = response.SummaryOrder{
 		Order: orderData,
 		Description: fmt.Sprintf("Your invoice %s has been successfully processed and now awaiting for payment. ", orderData.IdOrder) +
 			fmt.Sprintf("Please make the payment of IDR %0.0f to the following bank account before %s to ensure your order is secured.", orderData.Total, dateExpired),
+		Carts: cartData.Response.Products,
 	}
 
 	return
