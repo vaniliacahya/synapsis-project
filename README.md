@@ -64,7 +64,7 @@ This feature consist endpoint order
 | `POST` | /checkout | - | YES | Feature for customer to make an order |
 
 ## ERD
-<img src="ERD-2.png">
+<img src="ERD.drawio.png">
 
 ## Authors
 
